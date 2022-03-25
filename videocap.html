@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>视频入门</title>
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="initializeOpenCV()"></script>
+</head>
+
+<body>
+<h2>视频入门示例</h2>
+<div class="caption">图片源： <input type="file" id="fileInput" name="file" />
+</div>
+
+<div class="box">
+    <video style="display:inline" width="480px" height="320px" id="videoInput" controls ></video>
+    video输出：
+    <video style="display:inline"  width="480px" height="320px" id="videoOutput" controls autoplay></video>
+</div>
+
+<script type="text/javascript">
+    let media = document.getElementById("videoInput");
+    let inputElement = document.getElementById('fileInput');
+    inputElement.addEventListener('change', (e) => {
+        if (e.target.files[0]) {
+            media.src = URL.createObjectURL(e.target.files[0]);
+        }
+    }, false);
+    let outputMedia = document.getElementById('videoOutput');
+    let stream;
+    let trackProcessor;
+    let trackGenerator;
+    let outStream;
+    let mediaRecorder;
+    let chunks ;
+    function initializeOpenCV() {
+        // 使用 OpenCV.js 提供的 onRuntimeInitialized 回调函数，该函数会在 OpenCV.js 完全加载并初始化后执行。
+        cv.onRuntimeInitialized = function() {
+
+            media.onloadedmetadata = function(e) {
+                //media.play();
+                //let src = new cv.Mat(media.height, media.width, cv.CV_8UC4);
+                //let dst = new cv.Mat(media.height, media.width, cv.CV_8UC1);
+                //let cap = new cv.VideoCapture(media);
+                const transformer = new TransformStream({
+                    async transform(videoFrame, controller) {
+                        const barcodes = await detectBarcodes(videoFrame);
+                        const newFrame = highlightBarcodes(videoFrame, barcodes);
+                        videoFrame.close();
+                        controller.enqueue(newFrame);
+                    },
+                });
+
+                stream = media.captureStream();
+                let videoTrack = stream.getVideoTracks()[0];
+                //trackProcessor?.readable.releaseLock();
+                //trackProcessor?.readable.cancel();
+                trackProcessor = new MediaStreamTrackProcessor({ track: videoTrack });
+                //trackGenerator?.writable.releaseLock();
+                //trackGenerator?.writable.close();
+                trackGenerator = new MediaStreamTrackGenerator({ kind: "video" });
+                trackProcessor.readable
+                    .pipeTo(trackGenerator.writable);
+
+                outStream = new MediaStream();
+                outStream.addTrack(trackGenerator)
+                mediaRecorder = new MediaRecorder(outStream);
+                chunks=[];
+                mediaRecorder.ondataavailable = (e) => {
+                    chunks.push(e.data);
+                };
+                mediaRecorder.onstop = (e) => {
+                    const blob = new Blob(chunks, { type: "video/mp4" });
+                    chunks = [];
+                    const videoURL = URL.createObjectURL(blob);
+                    outputMedia.src = videoURL;
+                }
+                mediaRecorder.start();
+                trackGenerator.getTracks().forEach(track=>{
+                   track.onended=() =>{
+                       mediaRecorder.stop();
+                   }
+                });
+                function processVideo() {
+
+                    let begin = Date.now();
+                    cap.read(src);
+                    cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
+                    //cv.imshow("canvasOutput", dst);
+                    let delay = 1000 / FPS - (Date.now() - begin);
+                    setTimeout(processVideo, delay);
+                }
+                //setTimeout(processVideo, 0);
+            }
+
+        }
+    }
+</script>
+</body>
+
+</html>
